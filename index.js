@@ -11,9 +11,7 @@ const server = http.createServer(app);
 const io = initializeSocket(server);
 
 app.use(cors({ origin: true }));
-app.use(express.static(path.join(__dirname, "public")));
-app.use("/gupshup/uploads", express.static("uploads"));
-// app.use("/gupshup/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/gupshup/uploads", express.static(path.join(__dirname, "uploads")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/gupshup", authRoutes);

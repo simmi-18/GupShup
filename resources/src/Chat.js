@@ -161,7 +161,6 @@ const ChatPage = () => {
     formData.append("message", input);
     formData.append("time", time);
     if (hasFiles) {
-      // formData.append("file", file[0]);
       file.forEach((f) => {
         formData.append("files", f); // append all files under the key "files"
       });
@@ -169,18 +168,20 @@ const ChatPage = () => {
 
     try {
       const res = await addChat(formData);
+      const uploadedFiles = res.uploaded || [];
 
-      const newMessage = {
-        room: roomData.room,
-        author: roomData.username,
-        message: input,
-        file_url: res.file_url || null,
-        time,
-      };
+      uploadedFiles.forEach((fileName) => {
+        const newMessage = {
+          room: roomData.room,
+          author: roomData.username,
+          message: input,
+          file_url: fileName, // use backend file name
+          time,
+        };
 
-      socket.emit("send_message", newMessage);
-      setMessageList((prev) => [...prev, newMessage]);
-
+        socket.emit("send_message", newMessage);
+        setMessageList((prev) => [...prev, newMessage]);
+      });
       setInput("");
       setFile([]);
       setFilePreview([]);

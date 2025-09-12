@@ -1,5 +1,6 @@
 const { Server } = require("socket.io");
 const { getUserStatus } = require("../../app/controllers/ChatController");
+
 const db = require("..");
 const initializeSocket = (server) => {
   const io = new Server(server, {
@@ -42,15 +43,15 @@ const initializeSocket = (server) => {
 
     socket.on("send_message", (data) => {
       // console.log("Server received message:", data); // ✅ Add this
-      socket.to(data.room).emit("receive_message", data);
+      io.to(data.room).emit("receive_message", data);
     });
 
     socket.on("typing", ({ room, username }) => {
-      socket.to(room).emit("typing", username);
+      io.to(room).emit("typing", username);
     });
 
     socket.on("stop_typing", ({ room, username }) => {
-      socket.to(room).emit("stop_typing", username);
+      io.to(room).emit("stop_typing", username);
     });
 
     socket.on("disconnect", async () => {

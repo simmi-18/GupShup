@@ -5,6 +5,7 @@ exports.up = function (knex) {
     table.string("room_id").notNullable();
     table.string("online_status").defaultTo("Offline");
     table.timestamp("created_at").defaultTo(knex.fn.now());
+    table.timestamp("updated_at").defaultTo(knex.fn.now());
   });
 };
 

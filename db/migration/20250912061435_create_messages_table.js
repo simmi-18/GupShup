@@ -4,9 +4,10 @@ exports.up = function (knex) {
     table.integer("user_id").notNullable();
     table.string("room_id").notNullable();
     table.text("message").nullable();
-    table.string("file_url").nullable();
+    table.json("file_url").nullable();
     table.string("time").notNullable();
     table.timestamp("created_at").defaultTo(knex.fn.now());
+    table.timestamp("updated_at").defaultTo(knex.fn.now());
   });
 };
 

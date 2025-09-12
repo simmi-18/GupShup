@@ -23,6 +23,7 @@ const ChatPage = () => {
 
   const typingTimeout = useRef(null);
   const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
   const navigate = useNavigate();
   const socket = useContext(SocketContext);
 
@@ -89,7 +90,13 @@ const ChatPage = () => {
       username: roomData.username,
     });
 
-    socket.on("user_list", setOnlineUsers);
+    // socket.on("user_list", setOnlineUsers);
+    socket.on("user_list", (users) => {
+      const uniqueUsers = Array.from(
+        new Map(users.map((u) => [u.username, u])).values()
+      );
+      setOnlineUsers(uniqueUsers);
+    });
 
     socket.on("typing", (typingUsername) => {
       if (typingUsername !== roomData.username) {
@@ -98,9 +105,10 @@ const ChatPage = () => {
     });
 
     socket.on("stop_typing", () => setTypingUser(null));
-    socket.on("receive_message", (data) => {
-      console.log("Received:", data);
-      setMessageList((prev) => [...prev, data]);
+
+    socket.on("receive_message", (newMessage) => {
+      console.log("Received:", newMessage);
+      setMessageList((prev) => [...prev, newMessage]);
     });
 
     return () => {
@@ -134,9 +142,9 @@ const ChatPage = () => {
       if (res.result) {
         const formatted = res.result.map((msg) => ({
           room: msg.room_id,
-          author: msg.user_id === roomData.id ? roomData.username : msg.user_id,
+          author: msg.user_id === roomData.id ? roomData.username : msg.author,
           message: msg.message,
-          file_url: msg.file_url?.trim() ? msg.file_url : null,
+          file_url: msg.file_url ? msg.file_url : null,
           time: msg.time,
         }));
         setMessageList(formatted);
@@ -145,46 +153,53 @@ const ChatPage = () => {
       console.error("Error fetching messages:", err);
     }
   };
-  const handleSend = async () => {
+
+  // ✅ Leave room
+  const handleLeaveRoom = () => {
+    socket.disconnect();
+    localStorage.clear();
+    navigate("/");
+  };
+
+  const handleSend = async (url) => {
     const hasText = input.trim() !== "";
     const hasFiles = file?.length > 0;
-    if (!hasText && !hasFiles) return;
+    const hasUrl = !!url;
+
+    if (!hasText && !hasFiles && !hasUrl) return;
 
     const time = new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const formData = new FormData();
 
+    const formData = new FormData();
     formData.append("user_id", roomData.id);
     formData.append("room_id", roomData.room);
-    formData.append("message", input);
+    formData.append("message", hasText ? input : "");
     formData.append("time", time);
+
     if (hasFiles) {
       file.forEach((f) => {
-        formData.append("files", f); // append all files under the key "files"
+        formData.append("files", f);
       });
+    }
+
+    if (hasUrl) {
+      formData.append("file_url", url);
     }
 
     try {
       const res = await addChat(formData);
-      const uploadedFiles = res.uploaded || [];
+      const newMessage = res.data;
+      socket.emit("send_message", newMessage);
 
-      uploadedFiles.forEach((fileName) => {
-        const newMessage = {
-          room: roomData.room,
-          author: roomData.username,
-          message: input,
-          file_url: fileName, // use backend file name
-          time,
-        };
-
-        socket.emit("send_message", newMessage);
-        setMessageList((prev) => [...prev, newMessage]);
-      });
+      // Reset states
       setInput("");
       setFile([]);
       setFilePreview([]);
+      setShowDropdown(false); // for GIF/sticker dropdown
+      if (fileInputRef.current) fileInputRef.current.value = "";
       socket.emit("stop_typing", {
         room: roomData.room,
         username: roomData.username,
@@ -192,45 +207,9 @@ const ChatPage = () => {
     } catch (err) {
       console.error("Failed to send message:", err.message);
     }
-    await fetchMessages();
   };
-  // ✅ Leave room
-  const handleLeaveRoom = () => {
-    socket.disconnect();
-    localStorage.clear();
-    navigate("/");
-  };
-  const handleMediaSend = async (url) => {
-    setShowDropdown(false);
-    const time = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const formData = new FormData();
-    formData.append("user_id", roomData.id);
-    formData.append("room_id", roomData.room);
-    formData.append("message", "");
-    formData.append("file_url", url);
-    formData.append("time", time);
 
-    try {
-      await addChat(formData);
-      const newMessage = {
-        room: roomData.room,
-        author: roomData.username,
-        message: "",
-        file_url: url,
-        time,
-      };
-      socket.emit("send_message", newMessage);
-      setMessageList((prev) => [...prev, newMessage]);
-    } catch (err) {
-      console.error("Media send failed:", err.message);
-    }
-    console.log("formData", formData);
-    await fetchMessages();
-  };
-  // ✅ Scroll to bottom when messages change
+  //  Scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageList]);
@@ -337,8 +316,8 @@ const ChatPage = () => {
                       onSelectEmoji={(emoji) =>
                         setInput((prev) => prev + emoji.native)
                       }
-                      onSelectGif={(url) => handleMediaSend(url)}
-                      onSelectSticker={(url) => handleMediaSend(url)}
+                      onSelectGif={(url) => handleSend(url)}
+                      onSelectSticker={(url) => handleSend(url)}
                     />
                   )}
 

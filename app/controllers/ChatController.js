@@ -9,7 +9,7 @@ const AddChat = async (req, res) => {
   const { user_id, room_id, message, time, file_url } = req.body;
   const files = req.files;
 
-  if (!user_id || !room_id || (!message && !files?.length && !file_url)) {
+  if (!user_id || !room_id || !message) {
     return res.status(400).json({ message: "Missing fields are required!" });
   }
 
@@ -82,6 +82,34 @@ const AddChat = async (req, res) => {
   }
 };
 
+const EditChat = async (req, res) => {
+  const { id, message } = req.body;
+  if (!id) {
+    return res.status(400).json({ message: "id is required!" });
+  }
+  if (!message) {
+    return res.status(400).json({ message: "Nothing to update" });
+  }
+  try {
+    const chat = await db("messages").where("id", id).first();
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+    const encryptedMessage = message ? encryptMessage(message) : chat.message;
+
+    const updatedRows = await db("messages").where("id", id).update({
+      message: encryptedMessage,
+    });
+    res.status(200).json({
+      message: "Chat updated successfully",
+      data: updatedRows,
+    });
+  } catch (error) {
+    console.error("Error updating chat:", error);
+    res.status(500).json({ message: "Error updating chat" });
+  }
+};
+
 const getChat = async (req, res) => {
   const { room } = req.params;
   try {
@@ -118,6 +146,25 @@ const getChat = async (req, res) => {
   }
 };
 
+const DeleteChat = async (req, res) => {
+  const { id } = req.body;
+  if (!id) {
+    return res.status(400).json({ message: "id is required!" });
+  }
+
+  try {
+    const chat = await db("messages").where("id", id).first();
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+    const delId = await db("messages").where("id", id).del();
+    res.status(200).json({ message: "Chat deleted successfully", data: delId });
+  } catch (error) {
+    console.error("Error deleting chat:", error);
+    res.status(500).json({ message: "Error deleting chat" });
+  }
+};
+
 const getUserStatus = async (userList) => {
   const usernames = userList.map((u) => u.username);
   const dbUsers = await db("users").whereIn("name", usernames);
@@ -130,6 +177,8 @@ const getUserStatus = async (userList) => {
 
 module.exports = {
   AddChat,
+  EditChat,
   getChat,
+  DeleteChat,
   getUserStatus,
 };

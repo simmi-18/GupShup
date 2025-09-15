@@ -33,7 +33,6 @@ export const addChat = async (formData) => {
         headers: { "Content-Type": "multipart/form-data" }, // ✅ tell server
       }
     );
-
     return response.data;
   } catch (error) {
     console.error("Error Saving Chat: ", error);
@@ -50,5 +49,31 @@ export const getChat = async ({ room }) => {
   } catch (error) {
     console.error("Error in Fetching  Chat: ", error);
     throw error.response?.data || { message: "Something went wrong" };
+  }
+};
+
+export const updateChat = async (formData) => {
+  try {
+    const response = await axios.put(
+      `${process.env.REACT_APP_API_URL}/gupshup/update-chat`,
+      formData
+    );
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { mesaage: "Failed to Update Chat" };
+  }
+};
+
+export const DeleteChat = async (formData) => {
+  try {
+    const response = await axios.delete(
+      `${process.env.REACT_APP_API_URL}/gupshup/delete-chat`,
+      {
+        data: formData,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { mesaage: "Failed to delete Chat" };
   }
 };

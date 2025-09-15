@@ -18,7 +18,7 @@ exports.AddRoom = [
       });
 
       res.status(200).json({
-        message: "User can Join Room Successfullyy!!!",
+        message: "User Join Room Successfullyy!!!",
         result: { username, room },
       });
     } catch (error) {

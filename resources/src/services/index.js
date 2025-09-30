@@ -64,13 +64,11 @@ export const updateChat = async (formData) => {
   }
 };
 
-export const DeleteChat = async (formData) => {
+export const deleteChat = async (formData) => {
   try {
     const response = await axios.delete(
       `${process.env.REACT_APP_API_URL}/gupshup/delete-chat`,
-      {
-        data: formData,
-      }
+      { data: formData }
     );
     return response.data;
   } catch (error) {

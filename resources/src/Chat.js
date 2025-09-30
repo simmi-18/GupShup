@@ -1,8 +1,8 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { Send, Paperclip, Images } from "lucide-react";
+import { Send, Paperclip, Images, FileText, X, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SocketContext } from "./context/SocketContext";
-import { addChat, getChat, getRoom } from "./services";
+import { addChat, deleteChat, getChat, getRoom, updateChat } from "./services";
 
 import EmojiGifStickerDropdown from "./components/Dropdown";
 import ChatMessages from "./components/ChatMessages";
@@ -14,12 +14,14 @@ const ChatPage = () => {
   const [input, setInput] = useState("");
   const [roomData, setRoomData] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const [editingId, setEditingId] = useState(null);
   const [messageList, setMessageList] = useState([]);
   const [typingUser, setTypingUser] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [zoomedContent, setZoomedContent] = useState(null);
   const [file, setFile] = useState([]);
   const [filePreview, setFilePreview] = useState([]);
+  const [replyTo, setReplyTo] = useState(null);
 
   const typingTimeout = useRef(null);
   const bottomRef = useRef(null);
@@ -91,13 +93,26 @@ const ChatPage = () => {
     });
 
     // socket.on("user_list", setOnlineUsers);
+    // socket.on("user_list", (users) => {
+    //   const uniqueUsers = Array.from(
+    //     new Map(users.map((u) => [u.username, u])).values()
+    //   );
+    //   setOnlineUsers(uniqueUsers);
+    // });
     socket.on("user_list", (users) => {
+      const formattedUsers = users.map((u) => ({
+        id: u.id,
+        username: u.username,
+        online: u.online_status === "online",
+        room: u.room_id,
+      }));
+
       const uniqueUsers = Array.from(
-        new Map(users.map((u) => [u.username, u])).values()
+        new Map(formattedUsers.map((u) => [u.username, u])).values()
       );
+
       setOnlineUsers(uniqueUsers);
     });
-
     socket.on("typing", (typingUsername) => {
       if (typingUsername !== roomData.username) {
         setTypingUser(typingUsername);
@@ -107,15 +122,45 @@ const ChatPage = () => {
     socket.on("stop_typing", () => setTypingUser(null));
 
     socket.on("receive_message", (newMessage) => {
-      console.log("Received:", newMessage);
       setMessageList((prev) => [...prev, newMessage]);
     });
+
+    socket.on("updated_message", (data) => {
+      // console.log("🔄 Received updated message:", data);
+      setMessageList((prev) =>
+        prev.map((m) =>
+          m.id === data.id
+            ? { ...m, message: data.message, edited: data.edited }
+            : m
+        )
+      );
+    });
+
+    socket.on("deleted_message", (data) => {
+      setMessageList((prev) => prev.filter((m) => m.id !== data.id));
+    });
+
+    // socket.on("reacted_message", ({ messageId, emoji, user }) => {
+    //   setMessageList((prev) =>
+    //     prev.map((msg) =>
+    //       msg.id === messageId
+    //         ? {
+    //             ...msg,
+    //             reactions: [...(msg.reactions || []), { emoji, user }],
+    //           }
+    //         : msg
+    //     )
+    //   );
+    // });
 
     return () => {
       socket.off("user_list");
       socket.off("typing");
       socket.off("stop_typing");
       socket.off("receive_message");
+      socket.off("updated_message");
+      socket.off("deleted_message");
+      socket.off("reacted_message");
     };
   }, [socket, roomData]);
 
@@ -141,7 +186,9 @@ const ChatPage = () => {
       const res = await getChat({ room: roomData.room });
       if (res.result) {
         const formatted = res.result.map((msg) => ({
+          id: msg.id,
           room: msg.room_id,
+          user_id: msg.user_id,
           author: msg.user_id === roomData.id ? roomData.username : msg.author,
           message: msg.message,
           file_url: msg.file_url ? msg.file_url : null,
@@ -154,7 +201,6 @@ const ChatPage = () => {
     }
   };
 
-  // ✅ Leave room
   const handleLeaveRoom = () => {
     socket.disconnect();
     localStorage.clear();
@@ -188,10 +234,23 @@ const ChatPage = () => {
     if (hasUrl) {
       formData.append("file_url", url);
     }
+    if (replyTo) {
+      formData.append("reply_to_id", replyTo.id);
+    }
 
     try {
       const res = await addChat(formData);
       const newMessage = res.data;
+      if (replyTo) {
+        newMessage.replyTo = {
+          id: replyTo.id,
+          author: replyTo.author,
+          message: replyTo.message,
+          files: replyTo.files,
+          file_url: replyTo.file_url,
+        };
+      }
+      console.log("result", newMessage);
       socket.emit("send_message", newMessage);
 
       // Reset states
@@ -200,6 +259,7 @@ const ChatPage = () => {
       setFilePreview([]);
       setShowDropdown(false); // for GIF/sticker dropdown
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setReplyTo(null);
       socket.emit("stop_typing", {
         room: roomData.room,
         username: roomData.username,
@@ -209,6 +269,67 @@ const ChatPage = () => {
     }
   };
 
+  const handleEdit = async (editingId) => {
+    if (!editingId || !input.trim()) return;
+    console.log("editingID : ", editingId);
+    const formData = {
+      id: editingId,
+      user_id: roomData.id,
+      message: input,
+    };
+    console.log("Edit FormData:", formData);
+    try {
+      const res = await updateChat(formData);
+      console.log("update res", res);
+      const updatedMessage = res.updatedMessage;
+      console.log("updatedMessage", updatedMessage);
+
+      socket.emit("update_message", {
+        id: updatedMessage.id,
+        user_id: updatedMessage.user_id,
+        message: updatedMessage.message,
+        room: roomData.room,
+        edited: 1,
+      });
+      setMessageList((prev) =>
+        prev.map((m) =>
+          m.id === updatedMessage.id
+            ? { ...m, message: updatedMessage.message }
+            : m
+        )
+      );
+      setEditingId(null);
+      setInput("");
+    } catch (err) {
+      console.error("Failed to update message:", err.message);
+    }
+  };
+
+  const handleDelete = async (msg) => {
+    const formData = {
+      id: msg.id,
+      user_id: msg.user_id,
+    };
+    try {
+      const res = await deleteChat(formData);
+      socket.emit("delete_message", {
+        id: msg.id,
+        room: res.room_id,
+      });
+      setMessageList((prev) => prev.filter((m) => m.id !== msg.id));
+    } catch (err) {
+      console.error("Failed to delete message:", err.message);
+    }
+  };
+  // const handleReactMessage = (msgId, emoji) => {
+  //   socket.emit("react_message", {
+  //     id: msgId,
+  //     emoji,
+  //     user: roomData.username,
+  //     room: roomData.room,
+  //   });
+  // };
+
   //  Scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -216,7 +337,6 @@ const ChatPage = () => {
 
   useEffect(() => {
     return () => {
-      // Cleanup all previews on unmount
       filePreview.forEach(({ preview }) => URL.revokeObjectURL(preview));
     };
   }, []);
@@ -248,13 +368,75 @@ const ChatPage = () => {
                 else if (url.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i))
                   type = "image";
                 setZoomedContent({ type, url });
-                await fetchMessages();
               }}
+              onReply={(msg) => {
+                setReplyTo(msg);
+                console.log("Reply to:", msg);
+              }}
+              onEdit={(msg) => {
+                setEditingId(msg.id);
+                setInput(msg.message);
+                console.log("Edit message:", msg);
+              }}
+              onCopy={(text) => {
+                navigator.clipboard.writeText(text);
+                alert("Copied!");
+              }}
+              onDelete={handleDelete}
+              // onReact={(msg) => console.log("React emoji to:", msg)}
             />
             <footer className="border-t border-gray-200 bg-white px-4 py-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full relative">
+                {/* ✅ Reply Box ABOVE input */}
+                {replyTo && (
+                  <div className="reply-box bg-gray-100 p-2 rounded-md mb-2 border-l-4 border-blue-400 relative">
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm font-medium text-gray-700">
+                        Replying to {replyTo.author}
+                      </span>
+                      <button
+                        onClick={() => setReplyTo(null)}
+                        className="text-gray-500 hover:text-red-500 text-sm ml-2"
+                      >
+                        <X />
+                      </button>
+                    </div>
+
+                    {replyTo.message && (
+                      <p className="text-sm text-gray-600 truncate">
+                        {replyTo.message}
+                      </p>
+                    )}
+
+                    {replyTo.file_url?.length > 0 && (
+                      <div className="flex gap-2 mt-1">
+                        {replyTo.file_url.map((file, idx) => {
+                          const isImage = file.match(
+                            /\.(jpeg|jpg|png|gif|webp)$/i
+                          );
+                          const fileUrl = file.startsWith("http")
+                            ? file
+                            : `${process.env.REACT_APP_API_URL}/gupshup/uploads/${file}`;
+
+                          return isImage ? (
+                            <img
+                              key={idx}
+                              src={fileUrl}
+                              alt="reply-preview"
+                              className="w-12 h-12 object-cover rounded"
+                            />
+                          ) : (
+                            <FileText
+                              key={idx}
+                              className="w-5 h-5 text-blue-500"
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="relative w-full">
-                  {/* Input wrapper */}
                   <div className="flex items-center border border-gray-300 rounded-full px-3 py-2 bg-white shadow-sm w-full">
                     {/* Emoji Button */}
                     <button
@@ -294,18 +476,40 @@ const ChatPage = () => {
                       type="text"
                       value={input}
                       onChange={handleTyping}
-                      onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                      placeholder="Type your message..."
+                      onKeyDown={(e) =>
+                        e.key === "Enter" &&
+                        (editingId ? handleEdit(editingId) : handleSend())
+                      }
+                      placeholder={
+                        editingId
+                          ? "Edit your message...."
+                          : "Type your message..."
+                      }
                       className="flex-1 outline-none text-sm bg-transparent"
                     />
+                    {/* Cancel Edit Button */}
+                    {editingId && (
+                      <button
+                        onClick={() => {
+                          setEditingId(null);
+                          setInput("");
+                        }}
+                        className="ml-2 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+                        type="button"
+                      >
+                        <X />
+                      </button>
+                    )}
                     {/* Send Button */}
                     <button
-                      onClick={handleSend}
+                      onClick={() =>
+                        editingId ? handleEdit(editingId) : handleSend()
+                      }
                       disabled={!input.trim() && file.length === 0}
                       className="ml-2 h-8 w-8 flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white disabled:opacity-50"
                       type="button"
                     >
-                      <Send className="w-4 h-4" />
+                      {editingId ? <Check /> : <Send className="w-4 h-4" />}
                     </button>
                   </div>
 

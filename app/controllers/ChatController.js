@@ -6,10 +6,14 @@ const path = require("path");
 require("dotenv").config();
 
 const AddChat = async (req, res) => {
-  const { user_id, room_id, message, time, file_url } = req.body;
+  const { user_id, room_id, message, time, file_url, reply_to_id } = req.body;
   const files = req.files;
 
-  if (!user_id || !room_id || !message) {
+  if (
+    !user_id ||
+    !room_id ||
+    (!message && !file_url && (!files || files.length === 0))
+  ) {
     return res.status(400).json({ message: "Missing fields are required!" });
   }
 
@@ -45,7 +49,6 @@ const AddChat = async (req, res) => {
             writer.on("finish", resolve);
             writer.on("error", reject);
           });
-
           uploadedFiles.push(uniqueName);
         } catch (err) {
           console.error("Error downloading external file:", err.message);
@@ -60,16 +63,19 @@ const AddChat = async (req, res) => {
       message: encryptedMessage,
       time,
       file_url: JSON.stringify(uploadedFiles),
+      reply_to_id: reply_to_id || null,
     });
     // console.log("files", files, file_url, uploadedFiles);
     // Build new message object in one go
     const newMessage = {
       id: insertedId,
+      user_id: user_id,
       room: room_id,
       author: user.name,
       message: message || "",
       file_url: uploadedFiles, // array form for frontend
       time,
+      reply_to_id: reply_to_id || null,
     };
 
     res.status(200).json({
@@ -83,26 +89,39 @@ const AddChat = async (req, res) => {
 };
 
 const EditChat = async (req, res) => {
-  const { id, message } = req.body;
-  if (!id) {
-    return res.status(400).json({ message: "id is required!" });
-  }
-  if (!message) {
-    return res.status(400).json({ message: "Nothing to update" });
-  }
+  const { id, user_id, message } = req.body;
+  console.log(id, user_id, message);
+  if (!id) return res.status(400).json({ message: "id is required!" });
+  if (!message) return res.status(400).json({ message: "Nothing to update" });
+
   try {
     const chat = await db("messages").where("id", id).first();
-    if (!chat) {
-      return res.status(404).json({ message: "Chat not found" });
+    if (!chat) return res.status(404).json({ message: "Chat not found" });
+    if (chat.user_id !== user_id) {
+      return res
+        .status(403)
+        .json({ message: "You can only edit your own messages" });
     }
-    const encryptedMessage = message ? encryptMessage(message) : chat.message;
+    // const encryptedMessage = message ? encryptMessage(message) : chat.message;
+    const encryptedMessage = encryptMessage(message);
 
-    const updatedRows = await db("messages").where("id", id).update({
-      message: encryptedMessage,
-    });
+    const updatedCount = await db("messages")
+      .where({ id })
+      .update({ message: encryptedMessage, edited: 1 });
+
+    if (updatedCount === 0) {
+      return res.status(404).json({ message: "Update failed. Row not found." });
+    }
+
+    const updatedMessage = await db("messages").where("id", id).first();
+    const decryptedMessage = {
+      ...updatedMessage,
+      message: decryptMessage(updatedMessage.message),
+      edited: updatedMessage.edited,
+    };
     res.status(200).json({
       message: "Chat updated successfully",
-      data: updatedRows,
+      updatedMessage: decryptedMessage,
     });
   } catch (error) {
     console.error("Error updating chat:", error);
@@ -115,6 +134,8 @@ const getChat = async (req, res) => {
   try {
     const messages = await db("messages as m")
       .join("users as u", "m.user_id", "u.id") // join users to get name
+      .leftJoin("messages as r", "m.reply_to_id", "r.id") // replied message
+      .leftJoin("users as ru", "r.user_id", "ru.id") // replied message author
       .select(
         "m.id",
         "m.room_id",
@@ -122,18 +143,32 @@ const getChat = async (req, res) => {
         "u.name as author",
         "m.message",
         "m.file_url",
-        "m.time"
+        "m.time",
+        "m.reply_to_id",
+        "r.id as reply_id",
+        "r.message as reply_message",
+        "r.file_url as reply_file_url",
+        "ru.name as reply_author"
       )
       .where("m.room_id", room)
       .orderBy("m.time", "asc");
 
     const decryptedMessages = messages.map((msg) => ({
       id: msg.id,
+      user_id: msg.user_id,
       room: msg.room_id,
       author: msg.author,
       message: msg.message ? decryptMessage(msg.message) : "",
       file_url: msg.file_url ? JSON.parse(msg.file_url) : [],
       time: msg.time,
+      replyTo: msg.reply_to_id
+        ? {
+            id: msg.reply_to_id,
+            author: msg.reply_author,
+            message: msg.reply_message ? decryptMessage(msg.reply_message) : "",
+            file_url: msg.reply_file_url ? JSON.parse(msg.reply_file_url) : [],
+          }
+        : null,
     }));
 
     res.status(200).json({
@@ -147,27 +182,45 @@ const getChat = async (req, res) => {
 };
 
 const DeleteChat = async (req, res) => {
-  const { id } = req.body;
-  if (!id) {
-    return res.status(400).json({ message: "id is required!" });
+  const { id, user_id } = req.body;
+  if (!id || !user_id) {
+    return res.status(400).json({ message: "id and user_id is required!" });
   }
-
   try {
-    const chat = await db("messages").where("id", id).first();
+    const chat = await db("messages").where({ id }).first();
     if (!chat) {
       return res.status(404).json({ message: "Chat not found" });
     }
-    const delId = await db("messages").where("id", id).del();
-    res.status(200).json({ message: "Chat deleted successfully", data: delId });
+
+    if (chat.user_id !== user_id) {
+      return res
+        .status(403)
+        .json({ message: "You can only delete your own messages!" });
+    }
+    const room_id = chat.room_id;
+    console.log("room_id", room_id);
+    await db("messages").where({ id }).del();
+    res.status(200).json({ message: "Chat deleted successfully", id, room_id });
   } catch (error) {
     console.error("Error deleting chat:", error);
     res.status(500).json({ message: "Error deleting chat" });
   }
 };
 
-const getUserStatus = async (userList) => {
-  const usernames = userList.map((u) => u.username);
-  const dbUsers = await db("users").whereIn("name", usernames);
+// const getUserStatus = async (userList) => {
+//   const usernames = userList.map((u) => u.username);
+//   const dbUsers = await db("users").whereIn("name", usernames);
+
+//   return dbUsers.map((user) => ({
+//     username: user.name,
+//     online: user.online_status === "online",
+//   }));
+// };
+
+const getUserStatus = async (room) => {
+  const dbUsers = await db("users")
+    .select("name", "online_status")
+    .where({ room_id });
 
   return dbUsers.map((user) => ({
     username: user.name,

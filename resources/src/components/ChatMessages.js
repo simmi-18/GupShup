@@ -12,7 +12,6 @@ const ChatMessages = ({
   onEdit,
   onDelete,
   onCopy,
-  onReact,
 }) => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const dropdownRef = useRef(null);
@@ -21,7 +20,6 @@ const ChatMessages = ({
     setActiveDropdown(activeDropdown === index ? null : index);
   };
 
-  // ✅ Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -116,92 +114,55 @@ const ChatMessages = ({
 
               {hasText && (
                 <div
-                  className={`relative inline-block px-3 py-2 rounded-2xl break-words shadow-sm ${
+                  className={`relative inline-block px-3 py-2 rounded-2xl break-words shadow-sm cursor-pointer ${
                     isUser
                       ? "bg-blue-100 text-blue-900"
                       : "bg-white text-gray-800"
                   }`}
-                  style={{ minWidth: "30px" }} // to avoid bubble shrinking too much
+                  style={{ minWidth: "30px" }}
                 >
-                  {/* Reply section (if any) */}
+                  {/* Reply section */}
                   {msg.replyTo && (
                     <div className="border-l-4 border-blue-400 pl-2 mb-2 text-xs bg-gray-50 rounded-md p-1 pr-6">
                       <strong className="block text-gray-700 text-xs">
                         {msg.replyTo.author}
                       </strong>
                       {msg.replyTo.message && (
-                        <p className="text-gray-600 truncate">
+                        <p className="text-gray-600 whitespace-pre-wrap break-words">
                           {msg.replyTo.message}
                         </p>
                       )}
-                      {Array.isArray(msg.replyTo.file_url) &&
-                        msg.replyTo.file_url.length > 0 &&
-                        msg.replyTo.file_url.map((file, idx) => {
-                          const fileUrl = file.startsWith("http")
-                            ? file
-                            : `${process.env.REACT_APP_API_URL}/gupshup/uploads/${file}`;
-
-                          const isImage = file.match(
-                            /\.(jpeg|jpg|png|gif|webp)$/i
-                          );
-
-                          return isImage ? (
-                            <img
-                              key={idx}
-                              src={fileUrl}
-                              alt="reply-attachment"
-                              className="max-w-[120px] max-h-24 rounded-md object-cover border mt-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onImageClick(fileUrl);
-                              }}
-                            />
-                          ) : (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-2 p-1 bg-gray-100 border rounded mt-1 w-fit cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onFileClick(fileUrl);
-                              }}
-                            >
-                              <FileText className="text-blue-500 w-4 h-4" />
-                              <span className="text-xs text-gray-600 truncate max-w-[100px]">
-                                {file.split("/").pop()}
-                              </span>
-                            </div>
-                          );
-                        })}
                     </div>
                   )}
 
                   {/* Main message */}
-                  {msg.edited ? (
-                    <p className="text-[10px] text-gray-400 ml-1">(edited) </p>
-                  ) : (
-                    <p className="whitespace-pre-wrap pr-10"> {msg.message}</p>
-                  )}
+                  <p className="whitespace-pre-wrap pr-10">
+                    {msg.message}
+                    {msg.edited && (
+                      <span className="text-[10px] text-gray-400 ml-1">
+                        (edited)
+                      </span>
+                    )}
+                  </p>
                   <span className="absolute bottom-1 right-2 text-[10px] text-gray-500">
                     {msg.time}
                   </span>
                 </div>
               )}
 
-              {/* File-only messages → keep time below */}
+              {/* Time for file-only */}
               {!hasText && hasFiles && (
                 <span className="text-xs text-gray-500 mt-1 block text-right">
                   {msg.time}
                 </span>
               )}
             </div>
-
             {/* Dropdown menu */}
             {activeDropdown === index && (
               <div
                 ref={dropdownRef}
                 className="absolute top-6 right-0 w-40 bg-white border rounded-lg shadow-lg z-50 p-2"
               >
-                {/* Reply (always) */}
                 <button
                   onClick={() => {
                     onReply(msg);
@@ -212,7 +173,6 @@ const ChatMessages = ({
                   Reply
                 </button>
 
-                {/* Sender options */}
                 {isUser && (
                   <>
                     {hasText && (
@@ -238,7 +198,6 @@ const ChatMessages = ({
                       </>
                     )}
 
-                    {/* For files/images/gifs/stickers → Delete only */}
                     {(showFileOnly || hasFiles || hasText) && (
                       <button
                         onClick={() => {
@@ -252,24 +211,12 @@ const ChatMessages = ({
                     )}
                   </>
                 )}
-
-                {/* React (always) */}
-                <button
-                  onClick={() => {
-                    onReact(msg);
-                    setActiveDropdown(null);
-                  }}
-                  className="block w-full text-left px-3 py-2 hover:bg-gray-100"
-                >
-                  React 😊
-                </button>
               </div>
             )}
           </div>
         );
       })}
 
-      {/* Typing indicator */}
       {typingUser && (
         <p className="text-xs text-gray-500 italic ml-2">
           {typingUser} is typing...

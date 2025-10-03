@@ -145,10 +145,12 @@ const getChat = async (req, res) => {
         "m.file_url",
         "m.time",
         "m.reply_to_id",
+        "m.edited",
         "r.id as reply_id",
         "r.message as reply_message",
         "r.file_url as reply_file_url",
-        "ru.name as reply_author"
+        "ru.name as reply_author",
+        "r.edited as reply_edited"
       )
       .where("m.room_id", room)
       .orderBy("m.time", "asc");
@@ -161,12 +163,14 @@ const getChat = async (req, res) => {
       message: msg.message ? decryptMessage(msg.message) : "",
       file_url: msg.file_url ? JSON.parse(msg.file_url) : [],
       time: msg.time,
+      edited: msg.edited === 1,
       replyTo: msg.reply_to_id
         ? {
             id: msg.reply_to_id,
             author: msg.reply_author,
             message: msg.reply_message ? decryptMessage(msg.reply_message) : "",
             file_url: msg.reply_file_url ? JSON.parse(msg.reply_file_url) : [],
+            edited: msg.reply_edited === 1,
           }
         : null,
     }));

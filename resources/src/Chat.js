@@ -140,18 +140,6 @@ const ChatPage = () => {
       setMessageList((prev) => prev.filter((m) => m.id !== data.id));
     });
 
-    // socket.on("reacted_message", ({ messageId, emoji, user }) => {
-    //   setMessageList((prev) =>
-    //     prev.map((msg) =>
-    //       msg.id === messageId
-    //         ? {
-    //             ...msg,
-    //             reactions: [...(msg.reactions || []), { emoji, user }],
-    //           }
-    //         : msg
-    //     )
-    //   );
-    // });
 
     return () => {
       socket.off("user_list");
@@ -193,6 +181,8 @@ const ChatPage = () => {
           message: msg.message,
           file_url: msg.file_url ? msg.file_url : null,
           time: msg.time,
+          edited: msg.edited,
+          replyTo: msg.replyTo,
         }));
         setMessageList(formatted);
       }
@@ -248,6 +238,7 @@ const ChatPage = () => {
           message: replyTo.message,
           files: replyTo.files,
           file_url: replyTo.file_url,
+          edited: replyTo.edited || 0,
         };
       }
       console.log("result", newMessage);
@@ -283,8 +274,7 @@ const ChatPage = () => {
       console.log("update res", res);
       const updatedMessage = res.updatedMessage;
       console.log("updatedMessage", updatedMessage);
-
-      socket.emit("update_message", {
+       socket.emit("update_message", {
         id: updatedMessage.id,
         user_id: updatedMessage.user_id,
         message: updatedMessage.message,
@@ -294,7 +284,7 @@ const ChatPage = () => {
       setMessageList((prev) =>
         prev.map((m) =>
           m.id === updatedMessage.id
-            ? { ...m, message: updatedMessage.message }
+            ? { ...m, message: updatedMessage.message, edited: 1 }
             : m
         )
       );
@@ -321,14 +311,6 @@ const ChatPage = () => {
       console.error("Failed to delete message:", err.message);
     }
   };
-  // const handleReactMessage = (msgId, emoji) => {
-  //   socket.emit("react_message", {
-  //     id: msgId,
-  //     emoji,
-  //     user: roomData.username,
-  //     room: roomData.room,
-  //   });
-  // };
 
   //  Scroll to bottom when messages change
   useEffect(() => {
@@ -383,7 +365,6 @@ const ChatPage = () => {
                 alert("Copied!");
               }}
               onDelete={handleDelete}
-              // onReact={(msg) => console.log("React emoji to:", msg)}
             />
             <footer className="border-t border-gray-200 bg-white px-4 py-3">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full relative">

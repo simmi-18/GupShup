@@ -37,17 +37,17 @@ const initializeSocket = (server) => {
     });
 
     socket.on("send_message", (data) => {
-      console.log("Server received message:", data); // ✅ Add this
+      // console.log("Server received message:", data);
       io.to(data.room).emit("receive_message", data);
     });
 
     socket.on("update_message", (data) => {
-      console.log("📢 Broadcasting updated message:", data);
+      // console.log("📢 Broadcasting updated message:", data);
       io.to(data.room).emit("updated_message", data);
     });
 
     socket.on("delete_message", async (data) => {
-      console.log("🗑️ Delete event received:", data);
+      // console.log("🗑️ Delete event received:", data);
       io.to(data.room).emit("deleted_message", { id: data.id });
     });
 

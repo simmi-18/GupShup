@@ -6,7 +6,8 @@ const path = require("path");
 require("dotenv").config();
 
 const AddChat = async (req, res) => {
-  const { user_id, room_id, message, time, file_url, reply_to_id } = req.body;
+  const { user_id, room_id, message, time, file_url, reply_to_id, status } =
+    req.body;
   const files = req.files;
 
   if (
@@ -62,8 +63,9 @@ const AddChat = async (req, res) => {
       room_id,
       message: encryptedMessage,
       time,
-      file_url: JSON.stringify(uploadedFiles),
+      file_url: uploadedFiles.length > 0 ? JSON.stringify(uploadedFiles) : null,
       reply_to_id: reply_to_id || null,
+      status,
     });
     // console.log("files", files, file_url, uploadedFiles);
     // Build new message object in one go
@@ -76,6 +78,7 @@ const AddChat = async (req, res) => {
       file_url: uploadedFiles, // array form for frontend
       time,
       reply_to_id: reply_to_id || null,
+      status,
     };
 
     res.status(200).json({
@@ -131,6 +134,8 @@ const EditChat = async (req, res) => {
 
 const getChat = async (req, res) => {
   const { room } = req.params;
+  const { user_id } = req.query;
+
   try {
     const messages = await db("messages as m")
       .join("users as u", "m.user_id", "u.id") // join users to get name
@@ -146,6 +151,7 @@ const getChat = async (req, res) => {
         "m.time",
         "m.reply_to_id",
         "m.edited",
+        "m.status",
         "r.id as reply_id",
         "r.message as reply_message",
         "r.file_url as reply_file_url",
@@ -161,23 +167,38 @@ const getChat = async (req, res) => {
       room: msg.room_id,
       author: msg.author,
       message: msg.message ? decryptMessage(msg.message) : "",
-      file_url: msg.file_url ? JSON.parse(msg.file_url) : [],
+      file_url: msg.file_url ? JSON.parse(msg.file_url) : null,
       time: msg.time,
       edited: msg.edited === 1,
+      status: msg.status || "sent",
       replyTo: msg.reply_to_id
         ? {
             id: msg.reply_to_id,
             author: msg.reply_author,
             message: msg.reply_message ? decryptMessage(msg.reply_message) : "",
-            file_url: msg.reply_file_url ? JSON.parse(msg.reply_file_url) : [],
+            file_url: msg.reply_file_url
+              ? JSON.parse(msg.reply_file_url)
+              : null,
             edited: msg.reply_edited === 1,
           }
         : null,
     }));
 
+    const toDeliverIds = decryptedMessages
+      .filter((m) => m.user_id !== Number(user_id) && m.status === "sent")
+      .map((m) => m.id);
+
+    if (toDeliverIds.length > 0) {
+      await db("messages")
+        .whereIn("id", toDeliverIds)
+        .update({ status: "delivered" });
+    }
+
     res.status(200).json({
       message: "User fetched chat successfully!",
-      result: decryptedMessages,
+      result: decryptedMessages.map((msg) =>
+        toDeliverIds.includes(msg.id) ? { ...msg, status: "delivered" } : msg
+      ),
     });
   } catch (error) {
     console.error("Error fetching messages:", error);
@@ -210,16 +231,6 @@ const DeleteChat = async (req, res) => {
     res.status(500).json({ message: "Error deleting chat" });
   }
 };
-
-// const getUserStatus = async (userList) => {
-//   const usernames = userList.map((u) => u.username);
-//   const dbUsers = await db("users").whereIn("name", usernames);
-
-//   return dbUsers.map((user) => ({
-//     username: user.name,
-//     online: user.online_status === "online",
-//   }));
-// };
 
 const getUserStatus = async (room) => {
   const dbUsers = await db("users")

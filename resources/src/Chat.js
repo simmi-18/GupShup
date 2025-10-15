@@ -122,7 +122,21 @@ const ChatPage = () => {
     socket.on("stop_typing", () => setTypingUser(null));
 
     socket.on("receive_message", (newMessage) => {
-      setMessageList((prev) => [...prev, newMessage]);
+      setMessageList((prev) => {
+        if (prev.some((m) => m.id === newMessage.id)) return prev;
+        return [
+          ...prev,
+          {
+            ...newMessage,
+            status: newMessage.user_id === roomData.id ? "sent" : "delivered",
+          },
+        ];
+      });
+    });
+    socket.on("seen_message", ({ id, status }) => {
+      setMessageList((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, status } : m))
+      );
     });
 
     socket.on("updated_message", (data) => {
@@ -140,7 +154,6 @@ const ChatPage = () => {
       setMessageList((prev) => prev.filter((m) => m.id !== data.id));
     });
 
-
     return () => {
       socket.off("user_list");
       socket.off("typing");
@@ -148,7 +161,6 @@ const ChatPage = () => {
       socket.off("receive_message");
       socket.off("updated_message");
       socket.off("deleted_message");
-      socket.off("reacted_message");
     };
   }, [socket, roomData]);
 
@@ -171,7 +183,7 @@ const ChatPage = () => {
   };
   const fetchMessages = async () => {
     try {
-      const res = await getChat({ room: roomData.room });
+      const res = await getChat({ room: roomData.room, user_id: roomData.id });
       if (res.result) {
         const formatted = res.result.map((msg) => ({
           id: msg.id,
@@ -183,6 +195,7 @@ const ChatPage = () => {
           time: msg.time,
           edited: msg.edited,
           replyTo: msg.replyTo,
+          status: msg.status,
         }));
         setMessageList(formatted);
       }
@@ -200,7 +213,7 @@ const ChatPage = () => {
   const handleSend = async (url) => {
     const hasText = input.trim() !== "";
     const hasFiles = file?.length > 0;
-    const hasUrl = !!url;
+    const hasUrl = url && url.trim() !== "";
 
     if (!hasText && !hasFiles && !hasUrl) return;
 
@@ -209,11 +222,14 @@ const ChatPage = () => {
       minute: "2-digit",
     });
 
+    const initialStatus = "sent";
+
     const formData = new FormData();
     formData.append("user_id", roomData.id);
     formData.append("room_id", roomData.room);
     formData.append("message", hasText ? input : "");
     formData.append("time", time);
+    formData.append("status", initialStatus);
 
     if (hasFiles) {
       file.forEach((f) => {
@@ -224,6 +240,7 @@ const ChatPage = () => {
     if (hasUrl) {
       formData.append("file_url", url);
     }
+
     if (replyTo) {
       formData.append("reply_to_id", replyTo.id);
     }
@@ -241,7 +258,9 @@ const ChatPage = () => {
           edited: replyTo.edited || 0,
         };
       }
+      // newMessage.status = "sent";
       console.log("result", newMessage);
+      setMessageList((prev) => [...prev, { ...newMessage, status: "sent" }]);
       socket.emit("send_message", newMessage);
 
       // Reset states
@@ -274,7 +293,7 @@ const ChatPage = () => {
       console.log("update res", res);
       const updatedMessage = res.updatedMessage;
       console.log("updatedMessage", updatedMessage);
-       socket.emit("update_message", {
+      socket.emit("update_message", {
         id: updatedMessage.id,
         user_id: updatedMessage.user_id,
         message: updatedMessage.message,
@@ -312,7 +331,19 @@ const ChatPage = () => {
     }
   };
 
-  //  Scroll to bottom when messages change
+  useEffect(() => {
+    if (!roomData || !roomData.room) return; // ⛔ stop if roomData not ready
+    messageList.forEach((msg) => {
+      if (msg.user_id !== roomData.id && msg.status === "delivered") {
+        socket.emit("message_seen_update", {
+          id: msg.id,
+          room: roomData.room,
+          // user_id: msg.user_id,
+        });
+      }
+    });
+  }, [messageList, roomData]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageList]);
@@ -327,64 +358,65 @@ const ChatPage = () => {
 
   return (
     <>
-      <div className="min-h-screen w-screen flex flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <div className="min-h-screen w-full flex flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+        {/* Header */}
         <ChatHeader
           roomData={roomData}
           onlineUsers={onlineUsers}
           onLeave={handleLeaveRoom}
         />
-        <div className="flex-1 w-full max-w-7xl mx-auto flex flex-col px-4 py-2">
-          <div className="flex-1 bg-white/80 backdrop-blur-sm rounded-xl shadow-xl flex flex-col overflow-hidden">
-            <ChatMessages
-              messages={messageList}
-              username={roomData.username}
-              typingUser={typingUser}
-              bottomRef={bottomRef}
-              onImageClick={(url) => {
-                setZoomedContent({ type: "image", url });
-              }}
-              onFileClick={async (url) => {
-                let type = "file";
-                if (url.match(/\.(mp4|webm)$/i)) type = "video";
-                else if (url.match(/\.pdf$/i)) type = "pdf";
-                else if (url.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i))
-                  type = "image";
-                setZoomedContent({ type, url });
-              }}
-              onReply={(msg) => {
-                setReplyTo(msg);
-                console.log("Reply to:", msg);
-              }}
-              onEdit={(msg) => {
-                setEditingId(msg.id);
-                setInput(msg.message);
-                console.log("Edit message:", msg);
-              }}
-              onCopy={(text) => {
-                navigator.clipboard.writeText(text);
-                alert("Copied!");
-              }}
-              onDelete={handleDelete}
-            />
-            <footer className="border-t border-gray-200 bg-white px-4 py-3">
+
+        {/* Chat Area */}
+        <div className="flex-1 w-full max-w-7xl mx-auto flex flex-col px-2 sm:px-4 md:px-6 py-2 md:py-4">
+          <div className="flex-1 bg-white/90 backdrop-blur-sm rounded-xl shadow-xl flex flex-col overflow-hidden">
+            {/* Messages Section */}
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4">
+              <ChatMessages
+                messages={messageList}
+                username={roomData.username}
+                typingUser={typingUser}
+                bottomRef={bottomRef}
+                onImageClick={(url) => setZoomedContent({ type: "image", url })}
+                onFileClick={async (url) => {
+                  let type = "file";
+                  if (url.match(/\.(mp4|webm)$/i)) type = "video";
+                  else if (url.match(/\.pdf$/i)) type = "pdf";
+                  else if (url.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i))
+                    type = "image";
+                  setZoomedContent({ type, url });
+                }}
+                onReply={(msg) => setReplyTo(msg)}
+                onEdit={(msg) => {
+                  setEditingId(msg.id);
+                  setInput(msg.message);
+                }}
+                onCopy={(text) => {
+                  navigator.clipboard.writeText(text);
+                  alert("Copied!");
+                }}
+                onDelete={handleDelete}
+              />
+            </div>
+
+            {/* Footer Input Section */}
+            <footer className="border-t border-gray-200 bg-white px-2 sm:px-4 py-2 sm:py-3">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full relative">
-                {/* ✅ Reply Box ABOVE input */}
+                {/* Reply Box */}
                 {replyTo && (
-                  <div className="reply-box bg-gray-100 p-2 rounded-md mb-2 border-l-4 border-blue-400 relative">
+                  <div className="reply-box bg-gray-100 p-2 rounded-md mb-2 border-l-4 border-blue-400 relative text-sm sm:text-base">
                     <div className="flex justify-between items-start">
-                      <span className="text-sm font-medium text-gray-700">
+                      <span className="font-medium text-gray-700">
                         Replying to {replyTo.author}
                       </span>
                       <button
                         onClick={() => setReplyTo(null)}
-                        className="text-gray-500 hover:text-red-500 text-sm ml-2"
+                        className="text-gray-500 hover:text-red-500 text-xs sm:text-sm ml-2"
                       >
-                        <X />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
-
                     {replyTo.message && (
-                      <p className="text-sm text-gray-600 truncate">
+                      <p className="text-gray-600 truncate">
                         {replyTo.message}
                       </p>
                     )}
@@ -417,18 +449,21 @@ const ChatPage = () => {
                     )}
                   </div>
                 )}
+
+                {/* Input Bar */}
                 <div className="relative w-full">
-                  <div className="flex items-center border border-gray-300 rounded-full px-3 py-2 bg-white shadow-sm w-full">
-                    {/* Emoji Button */}
+                  <div className="flex items-center border border-gray-300 rounded-full px-2 sm:px-3 py-2 bg-white shadow-sm w-full">
+                    {/* Emoji / Gif / Sticker Button */}
                     <button
                       onClick={() => setShowDropdown((s) => !s)}
-                      className="text-gray-500 mr-2"
+                      className="text-gray-500 mr-1 sm:mr-2"
                     >
-                      <Images />
+                      <Images className="w-5 h-5 sm:w-6 sm:h-6" />
                     </button>
+
                     {/* File Upload */}
-                    <label className="cursor-pointer text-gray-500 mr-2">
-                      <Paperclip className="w-4 h-4" />
+                    <label className="cursor-pointer text-gray-500 mr-1 sm:mr-2">
+                      <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
                       <input
                         type="file"
                         hidden
@@ -452,6 +487,7 @@ const ChatPage = () => {
                         }}
                       />
                     </label>
+
                     {/* Text Input */}
                     <input
                       type="text"
@@ -463,11 +499,12 @@ const ChatPage = () => {
                       }
                       placeholder={
                         editingId
-                          ? "Edit your message...."
+                          ? "Edit your message..."
                           : "Type your message..."
                       }
-                      className="flex-1 outline-none text-sm bg-transparent"
+                      className="flex-1 outline-none text-sm sm:text-base bg-transparent"
                     />
+
                     {/* Cancel Edit Button */}
                     {editingId && (
                       <button
@@ -475,26 +512,27 @@ const ChatPage = () => {
                           setEditingId(null);
                           setInput("");
                         }}
-                        className="ml-2 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+                        className="ml-1 sm:ml-2 h-8 w-8 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
                         type="button"
                       >
                         <X />
                       </button>
                     )}
+
                     {/* Send Button */}
                     <button
                       onClick={() =>
                         editingId ? handleEdit(editingId) : handleSend()
                       }
                       disabled={!input.trim() && file.length === 0}
-                      className="ml-2 h-8 w-8 flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white disabled:opacity-50"
+                      className="ml-1 sm:ml-2 h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white disabled:opacity-50"
                       type="button"
                     >
                       {editingId ? <Check /> : <Send className="w-4 h-4" />}
                     </button>
                   </div>
 
-                  {/* ✅ Unified Dropdown Component */}
+                  {/* Emoji/GIF/Sticker Dropdown */}
                   {showDropdown && (
                     <EmojiGifStickerDropdown
                       apiKey={process.env.REACT_APP_GIPHY_API_KEY}
@@ -506,12 +544,13 @@ const ChatPage = () => {
                     />
                   )}
 
+                  {/* Zoom Modal */}
                   <ZoomedContentModal
                     content={zoomedContent}
                     onClose={() => setZoomedContent(null)}
                   />
 
-                  {/* File Previews (below input) */}
+                  {/* File Previews */}
                   <FilePreviewList
                     filePreview={filePreview}
                     onRemove={(idx, preview) => {

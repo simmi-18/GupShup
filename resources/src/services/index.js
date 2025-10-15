@@ -40,10 +40,10 @@ export const addChat = async (formData) => {
   }
 };
 
-export const getChat = async ({ room }) => {
+export const getChat = async ({ room, user_id }) => {
   try {
     const response = await axios.get(
-      `${process.env.REACT_APP_API_URL}/gupshup/get-chat/${room}`
+      `${process.env.REACT_APP_API_URL}/gupshup/get-chat/${room}?user_id=${user_id}`
     );
     return response.data;
   } catch (error) {

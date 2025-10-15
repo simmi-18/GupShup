@@ -8,6 +8,7 @@ exports.up = function (knex) {
     table.string("time").notNullable();
     table.boolean("edited").defaultTo(0);
     table.integer("reply_to_id").nullable();
+    table.enu("status", ["sent", "delivered", "seen"]).defaultTo("sent");
     table.timestamp("created_at").defaultTo(knex.fn.now());
     table.timestamp("updated_at").defaultTo(knex.fn.now());
   });

@@ -11,29 +11,31 @@ const ZoomedContentModal = ({ content, onClose }) => {
   const isVideo = content.url?.match(/\.(mp4|webm)$/i);
   const isPDF = content.url?.match(/\.pdf$/i);
 
-  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.1, 3));
-  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.1, 0.2));
+  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.25, 3));
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.25, 0.75));
   const handleSliderChange = (e) => setZoom(parseFloat(e.target.value));
   const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center "
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
       onClick={onClose}
     >
-      {/* Close Button - top right */}
+      {/* Close Button */}
       <button
         onClick={onClose}
-        className="absolute top-6 right-6 text-gray-500 hover:text-gray-100 text-3xl p-2 z-50"
+        className="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl z-50"
         title="Close"
       >
         <X />
       </button>
 
-      {/* Controls - bottom left */}
+      {/* Controls */}
       {isImage && (
         <div
-          className="absolute bottom-6 left-6 z-50 flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2 rounded-lg border border-white/20 shadow-lg"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 
+                     z-50 flex items-center gap-3 bg-white/10 backdrop-blur-md 
+                     px-4 py-2 rounded-xl border border-white/20 shadow-lg"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -52,12 +54,12 @@ const ZoomedContentModal = ({ content, onClose }) => {
           </button>
           <input
             type="range"
-            min="0.2"
+            min="0.75"
             max="3"
-            step="0.1"
+            step="0.25"
             value={zoom}
             onChange={handleSliderChange}
-            className="w-32 h-1 accent-blue-500 bg-gray-700 rounded cursor-pointer"
+            className="w-28 h-1 accent-blue-500 bg-gray-700 rounded cursor-pointer"
             title="Zoom"
           />
           <button
@@ -70,32 +72,45 @@ const ZoomedContentModal = ({ content, onClose }) => {
         </div>
       )}
 
-      {/* Main content container */}
+      {/* Main Content */}
       <div
-        className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center"
+        className="relative flex items-center justify-center p-4"
         onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "85vw",
+          maxHeight: "80vh",
+        }}
       >
         {isImage ? (
-          <img
-            src={content.url}
-            alt="Zoomed"
+          <div
             style={{
               transform: `scale(${zoom}) rotate(${rotation}deg)`,
               transition: "transform 0.3s ease",
+              transformOrigin: "center center",
             }}
-            className="max-h-[80vh] max-w-[80vw] object-contain rounded-lg shadow-2xl"
-          />
+          >
+            <img
+              src={content.url}
+              alt="Zoomed"
+              style={{
+                width: `${50 + zoom * 10}vw`, // 🔹 grows in width
+                height: "auto",
+                maxHeight: "70vh", // 🔹 keeps within modal height
+              }}
+              className="object-contain rounded-lg shadow-2xl"
+            />
+          </div>
         ) : isVideo ? (
           <video
             src={content.url}
             controls
-            className="rounded-lg shadow-2xl max-h-[80vh] max-w-[80vw] object-contain"
+            className="rounded-lg shadow-2xl max-h-[70vh] max-w-[80vw] object-contain"
           />
         ) : isPDF ? (
           <iframe
             src={content.url}
             title="PDF Preview"
-            className="w-[80vw] h-[80vh] border rounded-lg bg-white shadow-2xl"
+            className="w-[85vw]  h-[70vh]  border rounded-lg bg-white shadow-2xl"
           />
         ) : (
           <div className="text-white text-center">

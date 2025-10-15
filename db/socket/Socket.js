@@ -1,11 +1,9 @@
 const { Server } = require("socket.io");
-const { getUserStatus } = require("../../app/controllers/ChatController");
-
 const db = require("..");
 const initializeSocket = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: ["http://localhost:4001"],
+      origin: ["http://localhost:4000", "http://localhost:4001"],
       methods: ["GET", "POST", "PUT"],
     },
   });
@@ -36,9 +34,26 @@ const initializeSocket = (server) => {
       // console.log(`User with ID: ${socket.id} joined room: ${room}`);
     });
 
-    socket.on("send_message", (data) => {
-      // console.log("Server received message:", data);
-      io.to(data.room).emit("receive_message", data);
+    socket.on("send_message", async (data) => {
+      io.to(data.room).emit("receive_message", {
+        ...data,
+        status: "delivered", // delivered for the receiver
+      });
+
+      // Update status to 'delivered' for the sender
+      await db("messages")
+        .where({ id: data.id })
+        .update({ status: "delivered" })
+        .catch((err) => console.error("Error updating delivered status:", err));
+    });
+ 
+    socket.on("message_seen_update", async (data) => {
+      try {
+        await db("messages").where({ id: data.id }).update({ status: "seen" });
+        io.to(data.room).emit("seen_message", { id: data.id, status: "seen" });
+      } catch (err) {
+        console.error("Error updating seen status:", err);
+      }
     });
 
     socket.on("update_message", (data) => {

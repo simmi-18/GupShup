@@ -46,28 +46,27 @@ const GiphyToggleSearchbox = ({ apiKey, onSelect, type = "gifs" }) => {
   }, [type, searchTerm]);
 
   return (
-    <div className="w-full">
+    <div className="w-full px-2 sm:px-0">
       {/* Search Input */}
-      <form onSubmit={searchGiphy} className="mb-2">
+      <form onSubmit={searchGiphy} className="mb-3">
         <input
           type="text"
           placeholder={`Search ${type}...`}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-2 py-1 border rounded text-sm"
+          className="w-full px-3 py-2 border rounded-md text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
       </form>
 
       {/* Results */}
-      <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[250px] sm:max-h-[300px] overflow-y-auto">
         {results.map((item) => (
           <img
             key={item.id}
             src={item.images.fixed_height.url}
             alt={item.title}
             onClick={() => onSelect(item.images.original.url)}
-            // onClick={() => onSelect(item.images.fixed_height.url)}
-            className="cursor-pointer rounded hover:scale-105 transition"
+            className="cursor-pointer rounded-md hover:scale-105 transition-transform duration-200 w-full h-auto object-cover"
           />
         ))}
       </div>

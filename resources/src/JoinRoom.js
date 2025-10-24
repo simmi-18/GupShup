@@ -1,20 +1,23 @@
 import React, { useContext, useEffect, useState } from "react";
-import { Users, ArrowRight } from "lucide-react";
+import { Users, ArrowRight, QrCode } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { joinRoom } from "./services";
 import { SocketContext } from "./context/SocketContext";
 import { v4 as uuidv4 } from "uuid";
+import QRScannerModal from "./components/QRScannerModal";
 
 const JoinRoom = () => {
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanned, setScanned] = useState(false);
+
   const navigate = useNavigate();
   const socket = useContext(SocketContext);
 
   useEffect(() => {
     if (!socket) return;
     console.log("📡 Frontend Socket connected:", socket.id);
-
     return () => {
       console.log("❌ Frontend Socket disconnected:", socket.id);
     };
@@ -45,6 +48,30 @@ const JoinRoom = () => {
     setRoom(newRoomId);
   };
 
+  const handleScan = (data) => {
+    if (data && !scanned) {
+      setScanned(true);
+      try {
+        const parsed = JSON.parse(data.text || data);
+        if (parsed.room) {
+          setRoom(parsed.room);
+          alert(`✅ Room scanned successfully! Room ID: ${parsed.room}`);
+          setTimeout(() => {
+            handleJoin({ preventDefault: () => {} });
+          }, 800);
+        } else {
+          alert("⚠️ Invalid QR code data");
+        }
+      } catch (error) {
+        alert("⚠️ Could not read QR code");
+      }
+    }
+  };
+
+  const handleError = (err) => {
+    console.error("QR Scanner Error:", err);
+  };
+
   const handleJoin = async (e) => {
     e.preventDefault();
     if (!username.trim() || !room.trim()) return;
@@ -63,7 +90,6 @@ const JoinRoom = () => {
       alert(error.message);
     }
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-10 lg:p-16">
       {/* Header / Logo */}
@@ -89,7 +115,7 @@ const JoinRoom = () => {
             Join a Room
           </h2>
           <p className="text-gray-600 text-sm sm:text-base">
-            Enter your details to start chatting
+            Enter details or scan QR to join instantly
           </p>
         </div>
 
@@ -121,6 +147,12 @@ const JoinRoom = () => {
             >
               <span className="text-base sm:text-lg">💬</span>
               Room ID
+              <QrCode
+                onClick={() => setShowScanner(true)}
+                className="text-gray-600 hover:text-blue-600 cursor-pointer ml-2"
+                size={18}
+                title="Scan QR Code to Join Room"
+              />
             </label>
             <input
               id="room"
@@ -162,6 +194,14 @@ const JoinRoom = () => {
       <div className="text-center mt-6 sm:mt-8 text-gray-500 text-xs sm:text-sm">
         <p>Secure • Fast • Reliable</p>
       </div>
+
+      {showScanner && (
+        <QRScannerModal
+          onError={handleError}
+          onClose={() => setShowScanner(false)}
+          onResult={handleScan}
+        />
+      )}
     </div>
   );
 };

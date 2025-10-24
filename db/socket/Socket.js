@@ -30,7 +30,11 @@ const initializeSocket = (server) => {
         .select("id", "name as username", "online_status", "room_id")
         .where({ room_id: room });
 
+      // 🔹 Send updated list to everyone in the room
       io.to(room).emit("user_list", userStatus);
+
+      // 🔹 Send the same list directly to the newly joined user
+      socket.emit("user_list", userStatus);
       // console.log(`User with ID: ${socket.id} joined room: ${room}`);
     });
 
@@ -46,7 +50,7 @@ const initializeSocket = (server) => {
         .update({ status: "delivered" })
         .catch((err) => console.error("Error updating delivered status:", err));
     });
- 
+
     socket.on("message_seen_update", async (data) => {
       try {
         await db("messages").where({ id: data.id }).update({ status: "seen" });

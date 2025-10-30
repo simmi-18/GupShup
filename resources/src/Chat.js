@@ -9,6 +9,7 @@ import ChatMessages from "./components/ChatMessages";
 import ChatHeader from "./components/ChatHeader";
 import ZoomedContentModal from "./components/ZoomedContentModal";
 import FilePreviewList from "./components/FilePreviewList";
+import { playSound, unlockAudio } from "./utils/playSound";
 
 const ChatPage = () => {
   const [input, setInput] = useState("");
@@ -84,6 +85,15 @@ const ChatPage = () => {
     return () => socket.off("connect", handleReconnect);
   }, [socket, roomData]);
 
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      unlockAudio();
+      window.removeEventListener("click", handleUserInteraction);
+    };
+    window.addEventListener("click", handleUserInteraction);
+    return () => window.removeEventListener("click", handleUserInteraction);
+  }, []);
+
   //  Emit join_room and listen for updates
   useEffect(() => {
     if (!socket || !roomData) return;
@@ -92,13 +102,6 @@ const ChatPage = () => {
       username: roomData.username,
     });
 
-    // socket.on("user_list", setOnlineUsers);
-    // socket.on("user_list", (users) => {
-    //   const uniqueUsers = Array.from(
-    //     new Map(users.map((u) => [u.username, u])).values()
-    //   );
-    //   setOnlineUsers(uniqueUsers);
-    // });
     socket.on("user_list", (users) => {
       const formattedUsers = users.map((u) => ({
         id: u.id,
@@ -132,7 +135,17 @@ const ChatPage = () => {
           },
         ];
       });
+      const isOwnMessage = String(newMessage.user_id) === String(roomData.id);
+      const isSameRoom = String(newMessage.room) === String(roomData.room);
+
+      if (!isOwnMessage && isSameRoom) {
+        // console.log("📩 Playing receive sound");
+        setTimeout(() => playSound("receive"), 150);
+      } else {
+        console.log("⛔ Not playing sound —", { isOwnMessage, isSameRoom });
+      }
     });
+
     socket.on("seen_message", ({ id, status }) => {
       setMessageList((prev) =>
         prev.map((m) => (m.id === id ? { ...m, status } : m))
@@ -262,7 +275,7 @@ const ChatPage = () => {
       console.log("result", newMessage);
       setMessageList((prev) => [...prev, { ...newMessage, status: "sent" }]);
       socket.emit("send_message", newMessage);
-
+      playSound("send");
       // Reset states
       setInput("");
       setFile([]);
@@ -521,9 +534,14 @@ const ChatPage = () => {
 
                     {/* Send Button */}
                     <button
-                      onClick={() =>
-                        editingId ? handleEdit(editingId) : handleSend()
-                      }
+                      onClick={() => {
+                        unlockAudio();
+                        if (editingId) {
+                          handleEdit(editingId);
+                        } else {
+                          handleSend();
+                        }
+                      }}
                       disabled={!input.trim() && file.length === 0}
                       className="ml-1 sm:ml-2 h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white disabled:opacity-50"
                       type="button"

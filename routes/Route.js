@@ -10,7 +10,7 @@ const upload = require("../middleware/multer");
 const router = express.Router();
 
 //Join Room
-router.post("/add-room", AddRoom);
+router.post("/add-room", upload.single("profileImage"), AddRoom);
 router.get("/get-room", getRoom);
 
 // Chat Room

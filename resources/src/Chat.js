@@ -46,10 +46,13 @@ const ChatPage = () => {
         });
         if (res && res.success) {
           setRoomData({
-            id: res.data.id, // 🆕 Get user_id
+            id: res.data.id,
             username: res.data.username,
             room: res.data.room,
+            profileImage: res.data.profileImage,
           });
+          if (res.data.profileImage)
+            localStorage.setItem("profileImage", res.data.profileImage);
         } else {
           navigate("/");
         }
@@ -68,23 +71,6 @@ const ChatPage = () => {
     }
   }, [roomData]);
 
-  //  Rejoin on socket reconnect
-  useEffect(() => {
-    if (!socket || !roomData) return;
-
-    const handleReconnect = () => {
-      socket.emit("join_room", {
-        room: roomData.room,
-        username: roomData.username,
-      });
-    };
-    if (socket.connected) {
-      handleReconnect();
-    }
-    socket.on("connect", handleReconnect);
-    return () => socket.off("connect", handleReconnect);
-  }, [socket, roomData]);
-
   useEffect(() => {
     const handleUserInteraction = () => {
       unlockAudio();
@@ -94,20 +80,40 @@ const ChatPage = () => {
     return () => window.removeEventListener("click", handleUserInteraction);
   }, []);
 
+  useEffect(() => {
+    if (!socket || !roomData?.room || !roomData?.username) return;
+
+    const handleJoinOnce = () => {
+      if (!socket.hasJoined) {
+        console.log("🟢 Emitting join_room once");
+        socket.emit("join_room", {
+          room: roomData.room,
+          username: roomData.username,
+          profileImage: roomData.profileImage,
+        });
+        socket.hasJoined = true; // ✅ mark as joined
+      }
+    };
+
+    if (socket.connected) handleJoinOnce();
+    socket.on("connect", handleJoinOnce);
+
+    return () => {
+      socket.off("connect", handleJoinOnce);
+    };
+  }, [socket, roomData]);
+
   //  Emit join_room and listen for updates
   useEffect(() => {
-    if (!socket || !roomData) return;
-    socket.emit("join_room", {
-      room: roomData.room,
-      username: roomData.username,
-    });
+    if (!socket || !roomData?.room || !roomData?.username) return;
 
-    socket.on("user_list", (users) => {
+    const handleUserList = (users) => {
       const formattedUsers = users.map((u) => ({
         id: u.id,
-        username: u.username,
+        username: u.username, // ensure this matches your DB column
         online: u.online_status === "online",
         room: u.room_id,
+        profileImage: u.profileImage,
       }));
 
       const uniqueUsers = Array.from(
@@ -115,7 +121,20 @@ const ChatPage = () => {
       );
 
       setOnlineUsers(uniqueUsers);
-    });
+
+      const currentUser = users.find(
+        (u) => u.username === localStorage.getItem("username")
+      );
+
+      if (currentUser && currentUser.profileImage) {
+        setRoomData((prev) => ({
+          ...prev,
+          profileImage: currentUser.profileImage,
+        }));
+      }
+    };
+
+    socket.on("user_list", handleUserList);
     socket.on("typing", (typingUsername) => {
       if (typingUsername !== roomData.username) {
         setTypingUser(typingUsername);
@@ -218,9 +237,18 @@ const ChatPage = () => {
   };
 
   const handleLeaveRoom = () => {
-    socket.disconnect();
-    localStorage.clear();
-    navigate("/");
+    if (socket && roomData) {
+      socket.emit("leave_room", {
+        room: roomData.room,
+        username: roomData.username,
+      });
+    }
+
+    setTimeout(() => {
+      socket.disconnect();
+      localStorage.clear();
+      navigate("/");
+    }, 300); // small delay to let server update
   };
 
   const handleSend = async (url) => {
@@ -271,7 +299,6 @@ const ChatPage = () => {
           edited: replyTo.edited || 0,
         };
       }
-      // newMessage.status = "sent";
       console.log("result", newMessage);
       setMessageList((prev) => [...prev, { ...newMessage, status: "sent" }]);
       socket.emit("send_message", newMessage);

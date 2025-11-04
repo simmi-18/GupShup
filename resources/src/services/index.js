@@ -1,10 +1,13 @@
 import axios from "axios";
 
-export const joinRoom = async ({ username, room }) => {
+export const joinRoom = async (formData) => {
   try {
     const response = await axios.post(
       `${process.env.REACT_APP_API_URL}/gupshup/add-room`,
-      { username, room }
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" }, // ✅ tell server
+      }
     );
     return response.data;
   } catch (error) {

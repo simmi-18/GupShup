@@ -5,10 +5,12 @@ import { joinRoom } from "./services";
 import { SocketContext } from "./context/SocketContext";
 import { v4 as uuidv4 } from "uuid";
 import QRScannerModal from "./components/QRScannerModal";
+import ProfileImage from "./components/ProfileImage";
 
 const JoinRoom = () => {
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
+  const [profileImage, setProfileImage] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
   const [scanned, setScanned] = useState(false);
 
@@ -76,20 +78,28 @@ const JoinRoom = () => {
     e.preventDefault();
     if (!username.trim() || !room.trim()) return;
     try {
-      const res = await joinRoom({ username, room });
+      const formData = new FormData();
+      formData.append("username", username);
+      formData.append("room", room);
+      if (profileImage) formData.append("profileImage", profileImage);
+      const res = await joinRoom(formData);
       console.log("Joining room:", res);
       localStorage.setItem("username", username);
       localStorage.setItem("room", room);
-
-      socket.emit("join_room", { room, username });
+      localStorage.setItem("profileImage", res.result.profileImage || "");
+      socket.emit("join_room", {
+        room,
+        username,
+        profileImage: res.result.profileImage,
+      });
       console.log("Socket emitted");
-
       navigate("/chat");
       console.log("Navigating to /chat...");
     } catch (error) {
       alert(error.message);
     }
   };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex flex-col items-center justify-center p-4 sm:p-6 md:p-10 lg:p-16">
       {/* Header / Logo */}
@@ -98,7 +108,7 @@ const JoinRoom = () => {
           <span className="text-2xl sm:text-3xl md:text-4xl">💬</span>
         </div>
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-          Gupshup
+          Chatify
         </h1>
         <p className="text-gray-600 mt-2 text-sm sm:text-base md:text-lg">
           Connect and chat with people around the world
@@ -111,6 +121,7 @@ const JoinRoom = () => {
         className="w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl bg-white/80 backdrop-blur-sm rounded-xl shadow-xl px-6 sm:px-8 py-8 sm:py-10 space-y-6"
       >
         <div className="text-center space-y-1 sm:space-y-2">
+          <ProfileImage onImageSelect={setProfileImage} />
           <h2 className="text-xl sm:text-2xl font-semibold text-gray-800">
             Join a Room
           </h2>

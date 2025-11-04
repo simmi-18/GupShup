@@ -8,33 +8,34 @@ const initializeSocket = (server) => {
     },
   });
 
-  let users = {};
-  const onlineUsers = {};
-
   io.on("connection", (socket) => {
     console.log(`User Connected: ${socket.id}`);
     console.log("Total Connected Clients:", io.engine.clientsCount);
 
-    socket.on("join_room", async ({ room, username }) => {
+    socket.on("join_room", async ({ room, username, profileImage }) => {
       console.log(`✅ ${username} joined room ${room}`);
       socket.join(room);
       socket.username = username;
       socket.room = room;
-
+      socket.profileImage = profileImage;
       await db("users").where({ name: username }).update({
         online_status: "online",
         room_id: room,
+        profile_image: profileImage,
         updated_at: new Date(),
       });
       const userStatus = await db("users")
-        .select("id", "name as username", "online_status", "room_id")
+        .select(
+          "id",
+          "name as username",
+          "online_status",
+          "room_id",
+          "profile_image as profileImage"
+        )
         .where({ room_id: room });
 
       // 🔹 Send updated list to everyone in the room
       io.to(room).emit("user_list", userStatus);
-
-      // 🔹 Send the same list directly to the newly joined user
-      socket.emit("user_list", userStatus);
       // console.log(`User with ID: ${socket.id} joined room: ${room}`);
     });
 
@@ -78,6 +79,32 @@ const initializeSocket = (server) => {
       io.to(room).emit("stop_typing", username);
     });
 
+    socket.on("leave_room", async ({ room, username }) => {
+      try {
+        console.log(`🚪 ${username} left room ${room}`);
+
+        await db("users").where({ name: username }).update({
+          online_status: "offline",
+          updated_at: new Date(),
+        });
+
+        const userStatus = await db("users")
+          .select(
+            "id",
+            "name as username",
+            "online_status",
+            "room_id",
+            "profile_image as profileImage"
+          )
+          .where({ room_id: room });
+
+        io.to(room).emit("user_list", userStatus);
+        socket.leave(room);
+      } catch (err) {
+        console.error("Error in leave_room:", err);
+      }
+    });
+
     socket.on("disconnect", async () => {
       try {
         if (!socket.username || !socket.room) return;
@@ -87,7 +114,13 @@ const initializeSocket = (server) => {
         });
 
         const userStatus = await db("users")
-          .select("id", "name as username", "online_status", "room_id")
+          .select(
+            "id",
+            "name as username",
+            "online_status",
+            "room_id",
+            "profile_image as profileImage"
+          )
           .where({ room_id: socket.room });
 
         io.to(socket.room).emit("user_list", userStatus);

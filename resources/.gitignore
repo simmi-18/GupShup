@@ -16,6 +16,7 @@
 
 # env
 resources/.env
+resources/.env.production
 
 .env.local
 .env.development.local

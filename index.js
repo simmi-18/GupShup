@@ -16,7 +16,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/gupshup", authRoutes);
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4009;
 server.listen(PORT, () => {
   console.log(`Server is running on port http://localhost:${PORT}`);
 });

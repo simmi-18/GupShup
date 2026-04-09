@@ -3,6 +3,7 @@ const { encryptMessage, decryptMessage } = require("../utils/encryption");
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
+const { UPLOAD_DIR } = require("../../middleware/multer");
 require("dotenv").config();
 
 const AddChat = async (req, res) => {
@@ -39,9 +40,10 @@ const AddChat = async (req, res) => {
         try {
           const ext = path.extname(url.split("?")[0]);
           const uniqueName = `${Date.now()}-${Math.floor(
-            Math.random() * 1e9
+            Math.random() * 1e9,
           )}${ext}`;
-          const uploadPath = path.join(__dirname, "../../uploads", uniqueName);
+          // const uploadPath = path.join(__dirname, "../../uploads", uniqueName);
+          const uploadPath = path.join(UPLOAD_DIR, uniqueName);
           const response = await axios.get(url, { responseType: "stream" });
 
           await new Promise((resolve, reject) => {
@@ -156,7 +158,7 @@ const getChat = async (req, res) => {
         "r.message as reply_message",
         "r.file_url as reply_file_url",
         "ru.name as reply_author",
-        "r.edited as reply_edited"
+        "r.edited as reply_edited",
       )
       .where("m.room_id", room)
       .orderBy("m.time", "asc");
@@ -197,7 +199,7 @@ const getChat = async (req, res) => {
     res.status(200).json({
       message: "User fetched chat successfully!",
       result: decryptedMessages.map((msg) =>
-        toDeliverIds.includes(msg.id) ? { ...msg, status: "delivered" } : msg
+        toDeliverIds.includes(msg.id) ? { ...msg, status: "delivered" } : msg,
       ),
     });
   } catch (error) {

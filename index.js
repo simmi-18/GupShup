@@ -5,6 +5,7 @@ const cors = require("cors");
 const path = require("path");
 const initializeSocket = require("./db/socket/Socket");
 const authRoutes = require("./routes/Route");
+const { UPLOAD_DIR } = require("./middleware/multer");
 
 const app = express();
 const server = http.createServer(app);
@@ -21,7 +22,7 @@ app.use(
     credentials: true,
   }),
 );
-app.use("/gupshup/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/gupshup/uploads", express.static(UPLOAD_DIR));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/gupshup", authRoutes);

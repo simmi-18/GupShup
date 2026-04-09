@@ -10,7 +10,13 @@ const app = express();
 const server = http.createServer(app);
 const io = initializeSocket(server);
 
-app.use(cors({ origin: true }));
+app.use(
+  cors({
+    origin: "https://gup-shup-hazel.vercel.app", // your frontend domain
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    credentials: true,
+  }),
+);
 app.use("/gupshup/uploads", express.static(path.join(__dirname, "uploads")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

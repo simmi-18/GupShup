@@ -3,8 +3,13 @@ const db = require("..");
 const initializeSocket = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: ["http://localhost:4000", "http://localhost:4001"],
-      methods: ["GET", "POST", "PUT"],
+      origin: [
+        "http://localhost:4000",
+        "http://localhost:4001",
+        "https://gup-shup-hazel.vercel.app",
+      ],
+      methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+      credentials: true,
     },
   });
 
@@ -30,7 +35,7 @@ const initializeSocket = (server) => {
           "name as username",
           "online_status",
           "room_id",
-          "profile_image as profileImage"
+          "profile_image as profileImage",
         )
         .where({ room_id: room });
 
@@ -94,7 +99,7 @@ const initializeSocket = (server) => {
             "name as username",
             "online_status",
             "room_id",
-            "profile_image as profileImage"
+            "profile_image as profileImage",
           )
           .where({ room_id: room });
 
@@ -119,7 +124,7 @@ const initializeSocket = (server) => {
             "name as username",
             "online_status",
             "room_id",
-            "profile_image as profileImage"
+            "profile_image as profileImage",
           )
           .where({ room_id: socket.room });
 

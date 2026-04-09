@@ -12,7 +12,11 @@ const io = initializeSocket(server);
 
 app.use(
   cors({
-    origin: "https://gup-shup-hazel.vercel.app", // your frontend domain
+    origin: [
+      "http://localhost:4000",
+      "http://localhost:4001",
+      "https://gup-shup-hazel.vercel.app",
+    ], // your frontend domain
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true,
   }),
